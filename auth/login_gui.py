@@ -136,7 +136,7 @@ class LoginApp:
         # Footer
         self.footer_label = ttk.Label(
             self.main_frame,
-            text="© 2023 Smart Vegetable Storage System",
+            text="© 2025 Smart Vegetable Storage System",
             font=("Segoe UI", 8),
             foreground="#999999"
         )
