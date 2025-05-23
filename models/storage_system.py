@@ -3,6 +3,12 @@ from models.vegetable import Vegetable
 import math
 from datetime import datetime
 import platform
+from collections import deque
+
+# Safety thresholds
+MAX_SAFE_TEMP = 15   # °C - Above this is risky
+MAX_SAFE_HUMIDITY = 98  # % RH - Above this causes condensation
+
 # Windows notification imports
 try:
     if platform.system() == "Windows":
@@ -30,9 +36,25 @@ class StorageSystem:
 
     def create_bin(self, bin_id, max_capacity, temp, humidity):
         if bin_id in self.bins:
+            print(f"❌ Error: Bin {bin_id} already exists!")
             return False
+        if not self._is_environment_safe(temp, humidity):
+            print(f"🚫 FAILED TO CREATE BIN {bin_id}")
+            print(f"   Unsafe Conditions:")
+            print(f"   Temperature: {temp}°C | Max Safe: {MAX_SAFE_TEMP}°C")
+            print(f"   Humidity: {humidity}% RH | Max Safe: {MAX_SAFE_HUMIDITY}% RH")
+            print(f"   Bins must meet both temperature and humidity safety thresholds.")
+            return False
+
+        # Environment is safe, proceed with bin creation
         self.bins[bin_id] = StorageBin(bin_id, max_capacity, temp, humidity)
+        print(f"✅ Successfully created bin {bin_id}")
+        print(f"   Temp: {temp}°C | Humidity: {humidity}% RH | Capacity: {max_capacity} units")
         return True
+
+    def _is_environment_safe(self, temp, humidity):
+        """Check if the environment is within safe storage conditions"""
+        return temp <= MAX_SAFE_TEMP and humidity <= MAX_SAFE_HUMIDITY
 
     def get_current_capacity(self, bin_id):
         """Calculate total quantity of all vegetables in the bin"""
