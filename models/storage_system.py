@@ -6,20 +6,28 @@ import platform
 from collections import deque
 
 # Safety thresholds
-MAX_SAFE_TEMP = 15   # °C - Above this is risky
+MAX_SAFE_TEMP = 15   # °C (59°F) - Above this is risky
 MAX_SAFE_HUMIDITY = 98  # % RH - Above this causes condensation
 
-# Windows notification imports
+# Windows message box imports
 try:
     if platform.system() == "Windows":
-        from plyer import notification
-        NOTIFICATIONS_AVAILABLE = True
+        import ctypes
+        from ctypes import wintypes
+        MSGBOX_AVAILABLE = True
     else:
-        NOTIFICATIONS_AVAILABLE = False
-        print("Warning: Windows notifications not available on this platform")
+        MSGBOX_AVAILABLE = False
+        print("Warning: Windows message boxes not available on this platform")
 except ImportError:
-    NOTIFICATIONS_AVAILABLE = False
-    print("Warning: plyer library not installed. Install with: pip install plyer")
+    MSGBOX_AVAILABLE = False
+    print("Warning: ctypes library not available")
+
+# Message box constants
+MB_OK = 0x0
+MB_ICONERROR = 0x10
+MB_ICONWARNING = 0x30
+MB_ICONINFORMATION = 0x40
+MB_TOPMOST = 0x40000
 
 
 class StorageSystem:
@@ -34,27 +42,84 @@ class StorageSystem:
             'Broccoli': {'optimal_temp': 0, 'optimal_humidity': 95, 'shelf_life': 14}
         }
 
-    def create_bin(self, bin_id, max_capacity, temp, humidity):
-        if bin_id in self.bins:
-            print(f"❌ Error: Bin {bin_id} already exists!")
+    def _show_message_box(self, title, message, icon_type=MB_ICONERROR):
+        """Show Windows message box popup"""
+        if MSGBOX_AVAILABLE:
+            try:
+                # Use MessageBoxW for Unicode support
+                ctypes.windll.user32.MessageBoxW(
+                    None,  # Parent window handle (None = desktop)
+                    message,  # Message text
+                    title,  # Title
+                    icon_type | MB_OK | MB_TOPMOST  # Icon + OK button + stay on top
+                )
+                return True
+            except Exception as e:
+                print(f"Message box error: {e}")
+                print(f"{title}: {message}")
+                return False
+        else:
+            print(f"{title}: {message}")
             return False
+
+    def create_bin(self, bin_id, max_capacity, temp, humidity):
+        # Check if environment exceeds safety thresholds FIRST
         if not self._is_environment_safe(temp, humidity):
+            self._show_safety_alert(bin_id, temp, humidity, "create")
             print(f"🚫 FAILED TO CREATE BIN {bin_id}")
             print(f"   Unsafe Conditions:")
-            print(f"   Temperature: {temp}°C | Max Safe: {MAX_SAFE_TEMP}°C")
+            print(f"   Temperature: {temp}°C ({temp * 9/5 + 32:.1f}°F) | Max Safe: {MAX_SAFE_TEMP}°C ({MAX_SAFE_TEMP * 9/5 + 32:.1f}°F)")
             print(f"   Humidity: {humidity}% RH | Max Safe: {MAX_SAFE_HUMIDITY}% RH")
             print(f"   Bins must meet both temperature and humidity safety thresholds.")
             return False
-
-        # Environment is safe, proceed with bin creation
+        
+        # Then check if bin already exists
+        if bin_id in self.bins:
+            error_msg = f"Bin {bin_id} already exists!"
+            self._show_message_box("Error", error_msg, MB_ICONERROR)
+            print(f"❌ Error: {error_msg}")
+            return False
+        
+        # Environment is safe and bin doesn't exist, proceed with bin creation
         self.bins[bin_id] = StorageBin(bin_id, max_capacity, temp, humidity)
         print(f"✅ Successfully created bin {bin_id}")
-        print(f"   Temp: {temp}°C | Humidity: {humidity}% RH | Capacity: {max_capacity} units")
+        print(f"   Temp: {temp}°C ({temp * 9/5 + 32:.1f}°F) | Humidity: {humidity}% RH | Capacity: {max_capacity} units")
         return True
 
     def _is_environment_safe(self, temp, humidity):
         """Check if the environment is within safe storage conditions"""
         return temp <= MAX_SAFE_TEMP and humidity <= MAX_SAFE_HUMIDITY
+    
+    def _show_safety_alert(self, bin_id, temp, humidity, action="create"):
+        """Show Windows message box for unsafe storage conditions"""
+        temp_f = temp * 9/5 + 32  # Convert to Fahrenheit
+        max_temp_f = MAX_SAFE_TEMP * 9/5 + 32
+        
+        # Determine what's unsafe
+        unsafe_conditions = []
+        if temp > MAX_SAFE_TEMP:
+            unsafe_conditions.append(f"Temperature: {temp}°C ({temp_f:.1f}°F) > {MAX_SAFE_TEMP}°C ({max_temp_f:.1f}°F)")
+        if humidity > MAX_SAFE_HUMIDITY:
+            unsafe_conditions.append(f"Humidity: {humidity}% > {MAX_SAFE_HUMIDITY}%")
+        
+        title = "Storage Safety Alert"
+        if action == "create":
+            message = f"Cannot create bin '{bin_id}' due to unsafe conditions:\n\n"
+        elif action == "update":
+            message = f"Cannot update bin '{bin_id}' due to unsafe conditions:\n\n"
+        else:
+            message = f"Unsafe storage conditions detected in bin '{bin_id}':\n\n"
+        
+        message += "\n".join(unsafe_conditions)
+        message += "\n\nRisks:"
+        
+        if temp > MAX_SAFE_TEMP:
+            message += "\n• High temperature accelerates spoilage"
+        if humidity > MAX_SAFE_HUMIDITY:
+            message += "\n• High humidity causes condensation & mold"
+        
+        # Show message box with warning icon
+        self._show_message_box(title, message, MB_ICONWARNING)
 
     def get_current_capacity(self, bin_id):
         """Calculate total quantity of all vegetables in the bin"""
@@ -64,30 +129,26 @@ class StorageSystem:
 
     def add_vegetable_to_bin(self, bin_id, vegetable):
         if bin_id not in self.bins:
-            print(f"❌ Error: Bin {bin_id} does not exist!")
+            error_msg = f"Bin '{bin_id}' does not exist!"
+            self._show_message_box("Error", error_msg, MB_ICONERROR)
+            print(f"❌ Error: {error_msg}")
             return False
+            
         bin_obj = self.bins[bin_id]
         current_capacity = self.get_current_capacity(bin_id)
 
-        # Reject and delete if adding this vegetable would exceed capacity
+        # Reject and show message box if adding this vegetable would exceed capacity
         if current_capacity + vegetable.quantity > bin_obj.max_capacity:
+            error_msg = (f"Cannot add {vegetable.name} (Qty: {vegetable.quantity}) to bin '{bin_id}'.\n\n"
+                        f"Reason: Would exceed capacity\n"
+                        f"Current: {current_capacity}/{bin_obj.max_capacity}\n"
+                        f"After adding: {current_capacity + vegetable.quantity}/{bin_obj.max_capacity}")
+            
+            self._show_message_box("Storage Bin Full", error_msg, MB_ICONWARNING)
+            
             print(f"🚫 REJECTED: Cannot add {vegetable.name} (Qty: {vegetable.quantity}) to bin {bin_id}")
             print(f"   Reason: Would exceed capacity ({current_capacity + vegetable.quantity} > {bin_obj.max_capacity})")
             print(f"   Current capacity: {current_capacity}/{bin_obj.max_capacity}")
-
-            # Optional notification
-            if NOTIFICATIONS_AVAILABLE:
-                try:
-                    notification.notify(
-                        title=f"Storage Bin {bin_id} - Item Rejected",
-                        message=f"Cannot add {vegetable.name} (Qty: {vegetable.quantity})\n"
-                                f"Bin is full: {current_capacity}/{bin_obj.max_capacity}",
-                        app_name="Vegetable Storage System",
-                        timeout=8
-                    )
-                except Exception:
-                    pass
-
             return False
 
         # Add vegetable normally
@@ -99,12 +160,104 @@ class StorageSystem:
         return success
 
     def remove_vegetable_from_bin(self, bin_id, name):
-        if bin_id in self.bins:
-            success = self.bins[bin_id].remove_vegetable(name)
+        if bin_id not in self.bins:
+            error_msg = f"Bin '{bin_id}' does not exist!"
+            self._show_message_box("Error", error_msg, MB_ICONERROR)
+            return False
+            
+        success = self.bins[bin_id].remove_vegetable(name)
+        if success:
+            print(f"✅ Removed {name} from bin {bin_id}")
+        else:
+            error_msg = f"Vegetable '{name}' not found in bin '{bin_id}'!"
+            self._show_message_box("Error", error_msg, MB_ICONWARNING)
+        return success
+
+    def take_out_vegetable_quantity(self, bin_id, vegetable_name, quantity_to_take):
+        """
+        Take out a specific quantity of vegetables from a bin.
+        If the quantity equals or exceeds what's available, removes the entire item.
+        Returns the actual quantity taken out.
+        """
+        if bin_id not in self.bins:
+            error_msg = f"Bin '{bin_id}' does not exist!"
+            self._show_message_box("Error", error_msg, MB_ICONERROR)
+            print(f"❌ Error: {error_msg}")
+            return 0
+        
+        bin_obj = self.bins[bin_id]
+        vegetables = bin_obj.get_all_vegetables()
+        
+        # Find the vegetable
+        target_vegetable = None
+        for veg in vegetables:
+            if veg.name.lower() == vegetable_name.lower():
+                target_vegetable = veg
+                break
+        
+        if not target_vegetable:
+            error_msg = f"Vegetable '{vegetable_name}' not found in bin '{bin_id}'!"
+            self._show_message_box("Error", error_msg, MB_ICONWARNING)
+            print(f"❌ Error: {error_msg}")
+            return 0
+        
+        # Validate quantity
+        if quantity_to_take <= 0:
+            error_msg = f"Invalid quantity: {quantity_to_take}. Must be greater than 0."
+            self._show_message_box("Error", error_msg, MB_ICONWARNING)
+            print(f"❌ Error: {error_msg}")
+            return 0
+        
+        available_quantity = target_vegetable.quantity
+        actual_quantity_taken = min(quantity_to_take, available_quantity)
+        
+        # If taking all or more than available, remove the entire item
+        if quantity_to_take >= available_quantity:
+            success = bin_obj.remove_vegetable(vegetable_name)
             if success:
-                print(f"✅ Removed {name} from bin {bin_id}")
-            return success
-        return False
+                print(f"✅ Took out all {actual_quantity_taken} units of {vegetable_name} from bin {bin_id}")
+                print(f"   Item completely removed from bin")
+                return actual_quantity_taken
+            else:
+                error_msg = f"Failed to remove {vegetable_name} from bin '{bin_id}'!"
+                self._show_message_box("Error", error_msg, MB_ICONERROR)
+                return 0
+        
+        # Take out partial quantity - reduce the quantity in place
+        target_vegetable.quantity -= actual_quantity_taken
+        remaining_quantity = target_vegetable.quantity
+        
+        print(f"✅ Took out {actual_quantity_taken} units of {vegetable_name} from bin {bin_id}")
+        print(f"   Remaining in bin: {remaining_quantity} units")
+        
+        # Update bin capacity info
+        current_capacity = self.get_current_capacity(bin_id)
+        print(f"   Bin capacity after removal: {current_capacity}/{bin_obj.max_capacity}")
+        
+        return actual_quantity_taken
+
+    def get_vegetable_info_from_bin(self, bin_id, vegetable_name):
+        """
+        Get detailed information about a specific vegetable in a bin.
+        Returns vegetable object if found, None otherwise.
+        """
+        if bin_id not in self.bins:
+            return None
+        
+        vegetables = self.bins[bin_id].get_all_vegetables()
+        
+        for veg in vegetables:
+            if veg.name.lower() == vegetable_name.lower():
+                return {
+                    'name': veg.name,
+                    'quantity': veg.quantity,
+                    'expiry_date': veg.expiry_date,
+                    'days_until_expiry': veg.days_until_expiry(),
+                    'temperature': veg.temperature,
+                    'humidity': veg.humidity
+                }
+        
+        return None
 
     def get_bin_status(self, bin_id):
         """Get detailed status of a bin"""
@@ -126,7 +279,9 @@ class StorageSystem:
         """Print formatted bin status"""
         status = self.get_bin_status(bin_id)
         if not status:
-            print(f"❌ Bin {bin_id} not found!")
+            error_msg = f"Bin '{bin_id}' not found!"
+            self._show_message_box("Error", error_msg, MB_ICONERROR)
+            print(f"❌ {error_msg}")
             return
         print(f"\n📊 BIN STATUS - {bin_id}")
         print(f"Current Capacity: {status['current_capacity']}/{status['max_capacity']} units")
@@ -179,5 +334,144 @@ class StorageSystem:
         union = set1.union(set2)
         return len(intersection) / len(union) if union else 0
 
+    def check_bin_safety(self, bin_id):
+        """Check if an existing bin's conditions are still safe"""
+        if bin_id not in self.bins:
+            return False
+        
+        bin_obj = self.bins[bin_id]
+        temp = bin_obj.temperature
+        humidity = bin_obj.humidity
+        
+        if not self._is_environment_safe(temp, humidity):
+            self._show_safety_alert(bin_id, temp, humidity, "monitor")
+            print(f"⚠️  SAFETY WARNING: Bin {bin_id} has unsafe conditions!")
+            print(f"   Temperature: {temp}°C ({temp * 9/5 + 32:.1f}°F) | Max Safe: {MAX_SAFE_TEMP}°C ({MAX_SAFE_TEMP * 9/5 + 32:.1f}°F)")
+            print(f"   Humidity: {humidity}% RH | Max Safe: {MAX_SAFE_HUMIDITY}% RH")
+            return False
+        
+        return True
+    
+    def update_bin_conditions(self, bin_id, new_temp=None, new_humidity=None):
+        """Update bin environmental conditions with safety checks"""
+        if bin_id not in self.bins:
+            error_msg = f"Bin '{bin_id}' does not exist!"
+            self._show_message_box("Error", error_msg, MB_ICONERROR)
+            print(f"❌ Error: {error_msg}")
+            return False
+        
+        bin_obj = self.bins[bin_id]
+        current_temp = bin_obj.temperature
+        current_humidity = bin_obj.humidity
+        
+        # Use current values if not specified
+        temp_to_check = new_temp if new_temp is not None else current_temp
+        humidity_to_check = new_humidity if new_humidity is not None else current_humidity
+        
+        # Check safety before updating
+        if not self._is_environment_safe(temp_to_check, humidity_to_check):
+            self._show_safety_alert(bin_id, temp_to_check, humidity_to_check, "update")
+            print(f"🚫 FAILED TO UPDATE BIN {bin_id}")
+            print(f"   Proposed conditions are unsafe:")
+            print(f"   Temperature: {temp_to_check}°C ({temp_to_check * 9/5 + 32:.1f}°F) | Max Safe: {MAX_SAFE_TEMP}°C ({MAX_SAFE_TEMP * 9/5 + 32:.1f}°F)")
+            print(f"   Humidity: {humidity_to_check}% RH | Max Safe: {MAX_SAFE_HUMIDITY}% RH")
+            return False
+        
+        # Update conditions
+        if new_temp is not None:
+            bin_obj.temperature = new_temp
+        if new_humidity is not None:
+            bin_obj.humidity = new_humidity
+        
+        print(f"✅ Successfully updated bin {bin_id} conditions")
+        print(f"   New Temp: {bin_obj.temperature}°C ({bin_obj.temperature * 9/5 + 32:.1f}°F) | New Humidity: {bin_obj.humidity}% RH")
+        return True
+
+    def get_all_safety_violations(self):
+        """Get all bins that currently violate safety thresholds"""
+        violations = []
+        for bin_id, bin_obj in self.bins.items():
+            temp = bin_obj.temperature
+            humidity = bin_obj.humidity
+            
+            if not self._is_environment_safe(temp, humidity):
+                temp_f = temp * 9/5 + 32
+                violation_info = {
+                    'bin_id': bin_id,
+                    'temperature': temp,
+                    'temperature_f': round(temp_f, 1),
+                    'humidity': humidity,
+                    'temp_violation': temp > MAX_SAFE_TEMP,
+                    'humidity_violation': humidity > MAX_SAFE_HUMIDITY,
+                    'temp_excess': max(0, temp - MAX_SAFE_TEMP),
+                    'humidity_excess': max(0, humidity - MAX_SAFE_HUMIDITY)
+                }
+                violations.append(violation_info)
+        
+        return violations
+    
+    def check_all_bins_safety(self):
+        """Check safety of all bins and show message boxes for violations"""
+        violations = self.get_all_safety_violations()
+        
+        if violations:
+            print(f"⚠️  SAFETY ALERT: {len(violations)} bin(s) have unsafe conditions!")
+            
+            # Show a summary message box for multiple violations
+            if len(violations) > 1:
+                violation_summary = f"Safety violations detected in {len(violations)} bins:\n\n"
+                
+                for violation in violations:
+                    bin_id = violation['bin_id']
+                    violation_summary += f"• Bin '{bin_id}':\n"
+                    if violation['temp_violation']:
+                        violation_summary += f"  - Temperature: {violation['temperature']}°C ({violation['temperature_f']}°F)\n"
+                    if violation['humidity_violation']:
+                        violation_summary += f"  - Humidity: {violation['humidity']}%\n"
+                    violation_summary += "\n"
+                
+                violation_summary += "Please check individual bins for detailed information."
+                self._show_message_box("Multiple Safety Violations", violation_summary, MB_ICONWARNING)
+            else:
+                # Show detailed message for single violation
+                violation = violations[0]
+                bin_id = violation['bin_id']
+                temp = violation['temperature']
+                humidity = violation['humidity']
+                self._show_safety_alert(bin_id, temp, humidity, "monitor")
+            
+            # Print details to console
+            for violation in violations:
+                bin_id = violation['bin_id']
+                temp = violation['temperature']
+                humidity = violation['humidity']
+                
+                print(f"\n🚨 Bin {bin_id}:")
+                if violation['temp_violation']:
+                    print(f"   Temperature: {temp}°C ({violation['temperature_f']}°F) - EXCEEDS SAFE LIMIT by {violation['temp_excess']:.1f}°C")
+                if violation['humidity_violation']:
+                    print(f"   Humidity: {humidity}% RH - EXCEEDS SAFE LIMIT by {violation['humidity_excess']:.1f}%")
+            
+            return False
+        else:
+            print("✅ All bins are within safe storage parameters")
+            return True
+
     def get_all_bin_ids(self):
         return list(self.bins.keys())
+    
+    def get_safety_summary(self):
+        """Get a summary of safety status across all bins"""
+        total_bins = len(self.bins)
+        violations = self.get_all_safety_violations()
+        safe_bins = total_bins - len(violations)
+        
+        summary = {
+            'total_bins': total_bins,
+            'safe_bins': safe_bins,
+            'unsafe_bins': len(violations),
+            'safety_percentage': (safe_bins / total_bins * 100) if total_bins > 0 else 100,
+            'violations': violations
+        }
+        
+        return summary
