@@ -9,6 +9,10 @@ from collections import deque
 MAX_SAFE_TEMP = 15   # °C (59°F) - Above this is risky)
 MAX_SAFE_HUMIDITY = 98  # % RH - Above this causes condensation)
 
+# Vegetable-specific limits
+MAX_VEGGABLE_TEMP = 36    # Maximum allowed temperature for individual vegetables
+MAX_VEGGABLE_HUMIDITY = 95  # Maximum allowed humidity for individual vegetables
+
 # Windows message box imports
 try:
     if platform.system() == "Windows":
@@ -126,29 +130,49 @@ class StorageSystem:
             self._show_message_box("Error", error_msg, MB_ICONERROR)
             print(f"❌ Error: {error_msg}")
             return False
+
+        # Check if vegetable exceeds its own safe thresholds
+        veg_temp = vegetable.temp       # ← Corrected from vegetable.temperature
+        veg_humidity = vegetable.humidity
+
+        if veg_temp > MAX_VEGGABLE_TEMP or veg_humidity > MAX_VEGGABLE_HUMIDITY:
+            error_msg = (
+                f"Cannot add {vegetable.name} to bin '{bin_id}'.\n"
+                f"Vegetable conditions exceed safe limits:\n"
+                f"• Temperature: {veg_temp}°C (Max allowed: {MAX_VEGGABLE_TEMP}°C)\n"
+                f"• Humidity: {veg_humidity}% RH (Max allowed: {MAX_VEGGABLE_HUMIDITY}% RH)"
+            )
+            self._show_message_box("Vegetable Safety Violation", error_msg, MB_ICONWARNING)
+            print(f"🚫 REJECTED: Cannot add {vegetable.name} to bin {bin_id}")
+            print(f"   Reason: Vegetable exceeds safety limits:")
+            print(f"   Temperature: {veg_temp}°C | Max Allowed: {MAX_VEGGABLE_TEMP}°C")
+            print(f"   Humidity: {veg_humidity}% RH | Max Allowed: {MAX_VEGGABLE_HUMIDITY}% RH")
+            return False
+
         bin_obj = self.bins[bin_id]
         current_capacity = self.get_current_capacity(bin_id)
-        # Reject and show message box if adding this vegetable would exceed capacity
+
         if current_capacity + vegetable.quantity > bin_obj.max_capacity:
-            error_msg = (f"Cannot add {vegetable.name} (Qty: {vegetable.quantity}) to bin '{bin_id}'.\n"
-                        f"Reason: Would exceed capacity\n"
-                        f"Current: {current_capacity}/{bin_obj.max_capacity}\n"
-                        f"After adding: {current_capacity + vegetable.quantity}/{bin_obj.max_capacity}")
+            error_msg = (
+                f"Cannot add {vegetable.name} (Qty: {vegetable.quantity}) to bin '{bin_id}'.\n"
+                f"Reason: Would exceed capacity\n"
+                f"Current: {current_capacity}/{bin_obj.max_capacity}\n"
+                f"After adding: {current_capacity + vegetable.quantity}/{bin_obj.max_capacity}"
+            )
             self._show_message_box("Storage Bin Full", error_msg, MB_ICONWARNING)
             print(f"🚫 REJECTED: Cannot add {vegetable.name} (Qty: {vegetable.quantity}) to bin {bin_id}")
             print(f"   Reason: Would exceed capacity ({current_capacity + vegetable.quantity} > {bin_obj.max_capacity})")
             print(f"   Current capacity: {current_capacity}/{bin_obj.max_capacity}")
             return False
-        # Add vegetable normally
+
         success = bin_obj.add_vegetable(vegetable)
         if success:
             new_capacity = self.get_current_capacity(bin_id)
             print(f"✅ Successfully added {vegetable.name} (Qty: {vegetable.quantity}) to bin {bin_id}")
             print(f"   Bin capacity: {new_capacity}/{bin_obj.max_capacity}")
-            # Auto-sort vegetables by expiration date after adding
             self._auto_sort_bin_by_expiration(bin_id)
-            # Check for expired vegetables after adding and sorting
             self._check_fifo_warnings(bin_id)
+
         return success
 
     def _auto_remove_expired_vegetables(self, bin_id):

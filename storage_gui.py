@@ -100,7 +100,7 @@ class StorageApp:
         tab_control.add(add_tab, text="➕ Add Vegetable")
         form_frame = ttk.Frame(add_tab)
         form_frame.pack(expand=True, fill=tk.BOTH)
-        fields = [("Name:", "add_name"), ("Quantity:", "add_quantity"), ("Temperature (°C):", "add_temp"), ("Humidity (%):", "add_humid"), ("Expiry Date:", "add_expiry")]
+        fields = [("Name:", "add_name"), ("Quantity:", "add_quantity"), ("Temperature (°C):", "add_temp"), ("Humidity (%):", "add_humid"), ("Expiry Date (yyyy-mm-dd):", "add_expiry")]
         for label_text, attr_name in fields:
             self.create_modern_form_field(form_frame, label_text, attr_name)
         bin_frame = ttk.Frame(form_frame)
