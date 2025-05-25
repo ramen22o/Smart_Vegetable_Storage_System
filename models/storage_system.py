@@ -157,8 +157,199 @@ class StorageSystem:
             new_capacity = self.get_current_capacity(bin_id)
             print(f"✅ Successfully added {vegetable.name} (Qty: {vegetable.quantity}) to bin {bin_id}")
             print(f"   Bin capacity: {new_capacity}/{bin_obj.max_capacity}")
+            
+            # Auto-sort vegetables by expiration date after adding
+            self._auto_sort_bin_by_expiration(bin_id)
+            
+            # Check for expired vegetables after adding and sorting
+            self._check_fifo_warnings(bin_id)
+            
         return success
 
+    def _auto_sort_bin_by_expiration(self, bin_id):
+        """Automatically sort vegetables in bin by expiration date (FIFO order)"""
+        if bin_id not in self.bins:
+            return
+        
+        vegetables = self.bins[bin_id].get_all_vegetables()
+        if len(vegetables) <= 1:
+            return
+        
+        # Sort using quicksort by expiration date (soonest expiry first)
+        sorted_vegetables = self.quicksort_by_expiration(vegetables)
+        
+        # Update the bin's vegetable list with sorted order
+        # This assumes StorageBin has a method to replace its vegetable list
+        # You may need to adapt this based on your StorageBin implementation
+        self.bins[bin_id].vegetables = sorted_vegetables
+        
+        print(f"📋 Auto-sorted vegetables in bin {bin_id} by expiration date (FIFO order)")
+
+    def quicksort_by_expiration(self, vegetables):
+        """
+        Quicksort vegetables by expiration date (soonest expiry first for FIFO)
+        """
+        if len(vegetables) <= 1:
+            return vegetables
+        
+        pivot = vegetables[len(vegetables) // 2]
+        pivot_days = pivot.days_until_expiry()
+        
+        # Items expiring sooner go to the left (will be first in FIFO)
+        left = [x for x in vegetables if x.days_until_expiry() < pivot_days]
+        middle = [x for x in vegetables if x.days_until_expiry() == pivot_days]
+        right = [x for x in vegetables if x.days_until_expiry() > pivot_days]
+        
+        return self.quicksort_by_expiration(left) + middle + self.quicksort_by_expiration(right)
+
+    def _check_fifo_warnings(self, bin_id):
+        """Check for vegetables expiring today (0 days) and show FIFO warnings"""
+        if bin_id not in self.bins:
+            return
+        
+        vegetables = self.bins[bin_id].get_all_vegetables()
+        expiring_today = []
+        expiring_soon = []  # 1-2 days
+        
+        for veg in vegetables:
+            days_left = veg.days_until_expiry()
+            if days_left <= 0:
+                expiring_today.append(veg)
+            elif days_left <= 2:
+                expiring_soon.append(veg)
+        
+        # Show critical warning for vegetables expiring today
+        if expiring_today:
+            self._show_fifo_critical_warning(bin_id, expiring_today)
+        
+        # Show advisory warning for vegetables expiring soon
+        if expiring_soon:
+            self._show_fifo_advisory_warning(bin_id, expiring_soon)
+
+    def _show_fifo_critical_warning(self, bin_id, expiring_vegetables):
+        """Show critical FIFO warning for vegetables expiring today"""
+        if not expiring_vegetables:
+            return
+        
+        title = "🚨 CRITICAL: Vegetables Expiring TODAY!"
+        message = f"FIFO Alert - Bin '{bin_id}'\n\n"
+        message += "The following vegetables are expiring TODAY (0 days left):\n\n"
+        
+        for veg in expiring_vegetables:
+            days_left = veg.days_until_expiry()
+            if days_left <= 0:
+                message += f"• {veg.name} (Qty: {veg.quantity}) - EXPIRED/EXPIRING TODAY\n"
+        
+        message += "\n⚠️ FIFO ACTION REQUIRED:\n"
+        message += "• Use these vegetables IMMEDIATELY\n"
+        message += "• Remove if already spoiled\n"
+        message += "• Check quality before consumption\n"
+        message += "\nFollowing FIFO principle: Use oldest items first!"
+        
+        self._show_message_box(title, message, MB_ICONERROR)
+        
+        # Also print to console
+        print(f"\n🚨 CRITICAL FIFO WARNING - Bin {bin_id}:")
+        for veg in expiring_vegetables:
+            print(f"   • {veg.name} (Qty: {veg.quantity}) - EXPIRING TODAY!")
+
+    def _show_fifo_advisory_warning(self, bin_id, expiring_vegetables):
+        """Show advisory FIFO warning for vegetables expiring soon"""
+        if not expiring_vegetables:
+            return
+        
+        title = "⚠️ FIFO Advisory: Vegetables Expiring Soon"
+        message = f"FIFO Alert - Bin '{bin_id}'\n\n"
+        message += "The following vegetables are expiring soon:\n\n"
+        
+        for veg in expiring_vegetables:
+            days_left = veg.days_until_expiry()
+            message += f"• {veg.name} (Qty: {veg.quantity}) - {days_left} day(s) left\n"
+        
+        message += "\n📋 FIFO RECOMMENDATION:\n"
+        message += "• Plan to use these vegetables next\n"
+        message += "• Prioritize in meal planning\n"
+        message += "• Monitor daily for freshness\n"
+        message += "\nFollowing FIFO: First In, First Out!"
+        
+        self._show_message_box(title, message, MB_ICONWARNING)
+
+    def get_fifo_order_display(self, bin_id):
+        """Get vegetables in FIFO order for dashboard display"""
+        if bin_id not in self.bins:
+            return []
+        
+        vegetables = self.bins[bin_id].get_all_vegetables()
+        sorted_vegetables = self.quicksort_by_expiration(vegetables)
+        
+        fifo_display = []
+        for i, veg in enumerate(sorted_vegetables):
+            days_left = veg.days_until_expiry()
+            status = "🚨 CRITICAL" if days_left <= 0 else "⚠️ SOON" if days_left <= 2 else "✅ OK"
+            
+            fifo_display.append({
+                'fifo_position': i + 1,
+                'name': veg.name,
+                'quantity': veg.quantity,
+                'days_until_expiry': days_left,
+                'expiry_date': veg.expiry_date,
+                'status': status,
+                'use_priority': 'HIGH' if days_left <= 0 else 'MEDIUM' if days_left <= 2 else 'NORMAL'
+            })
+        
+        return fifo_display
+
+    def print_fifo_order(self, bin_id):
+        """Print FIFO order for a specific bin"""
+        fifo_order = self.get_fifo_order_display(bin_id)
+        
+        if not fifo_order:
+            print(f"📋 Bin '{bin_id}' is empty or does not exist")
+            return
+        
+        print(f"\n📋 FIFO ORDER - Bin '{bin_id}' (Use in this order):")
+        print("=" * 60)
+        
+        for item in fifo_order:
+            print(f"{item['fifo_position']:2d}. {item['name']} (Qty: {item['quantity']}) - "
+                  f"{item['days_until_expiry']} days left {item['status']}")
+        
+        print("=" * 60)
+        print("FIFO Rule: Use items with fewer days remaining first!")
+
+    def check_all_bins_fifo_status(self):
+        """Check FIFO status across all bins and show warnings"""
+        total_critical = 0
+        total_advisory = 0
+        
+        print(f"\n🔍 CHECKING FIFO STATUS ACROSS ALL BINS...")
+        
+        for bin_id in self.bins.keys():
+            vegetables = self.bins[bin_id].get_all_vegetables()
+            if not vegetables:
+                continue
+            
+            expiring_today = [v for v in vegetables if v.days_until_expiry() <= 0]
+            expiring_soon = [v for v in vegetables if 0 < v.days_until_expiry() <= 2]
+            
+            if expiring_today:
+                total_critical += len(expiring_today)
+                self._show_fifo_critical_warning(bin_id, expiring_today)
+            
+            if expiring_soon:
+                total_advisory += len(expiring_soon)
+                self._show_fifo_advisory_warning(bin_id, expiring_soon)
+        
+        # Summary
+        print(f"\n📊 FIFO STATUS SUMMARY:")
+        print(f"   🚨 Critical (expiring today): {total_critical} items")
+        print(f"   ⚠️  Advisory (expiring soon): {total_advisory} items")
+        
+        if total_critical == 0 and total_advisory == 0:
+            print("   ✅ All vegetables have adequate shelf life")
+
+    # Keep all your existing methods below (remove duplicate quicksort_by_freshness if needed)
+    
     def remove_vegetable_from_bin(self, bin_id, name):
         if bin_id not in self.bins:
             error_msg = f"Bin '{bin_id}' does not exist!"
@@ -168,6 +359,9 @@ class StorageSystem:
         success = self.bins[bin_id].remove_vegetable(name)
         if success:
             print(f"✅ Removed {name} from bin {bin_id}")
+            # Re-sort after removal and check for warnings
+            self._auto_sort_bin_by_expiration(bin_id)
+            self._check_fifo_warnings(bin_id)
         else:
             error_msg = f"Vegetable '{name}' not found in bin '{bin_id}'!"
             self._show_message_box("Error", error_msg, MB_ICONWARNING)
@@ -175,9 +369,8 @@ class StorageSystem:
 
     def take_out_vegetable_quantity(self, bin_id, vegetable_name, quantity_to_take):
         """
-        Take out a specific quantity of vegetables from a bin.
-        If the quantity equals or exceeds what's available, removes the entire item.
-        Returns the actual quantity taken out.
+        Take out a specific quantity of vegetables from a bin following FIFO principle.
+        Takes from the item with the earliest expiration date first.
         """
         if bin_id not in self.bins:
             error_msg = f"Bin '{bin_id}' does not exist!"
@@ -188,12 +381,15 @@ class StorageSystem:
         bin_obj = self.bins[bin_id]
         vegetables = bin_obj.get_all_vegetables()
         
-        # Find the vegetable
+        # Sort vegetables by expiration date for FIFO
+        sorted_vegetables = self.quicksort_by_expiration(vegetables)
+        
+        # Find the vegetable with earliest expiration date (FIFO principle)
         target_vegetable = None
-        for veg in vegetables:
+        for veg in sorted_vegetables:
             if veg.name.lower() == vegetable_name.lower():
                 target_vegetable = veg
-                break
+                break  # Take from the first (earliest expiring) match
         
         if not target_vegetable:
             error_msg = f"Vegetable '{vegetable_name}' not found in bin '{bin_id}'!"
@@ -211,12 +407,22 @@ class StorageSystem:
         available_quantity = target_vegetable.quantity
         actual_quantity_taken = min(quantity_to_take, available_quantity)
         
+        # Check if we're following FIFO properly
+        days_left = target_vegetable.days_until_expiry()
+        if days_left <= 0:
+            print(f"✅ GOOD FIFO PRACTICE: Taking from item expiring today/expired")
+        elif days_left <= 2:
+            print(f"✅ GOOD FIFO PRACTICE: Taking from item expiring soon ({days_left} days)")
+        
         # If taking all or more than available, remove the entire item
         if quantity_to_take >= available_quantity:
             success = bin_obj.remove_vegetable(vegetable_name)
             if success:
-                print(f"✅ Took out all {actual_quantity_taken} units of {vegetable_name} from bin {bin_id}")
+                print(f"✅ Took out all {actual_quantity_taken} units of {vegetable_name} from bin {bin_id} (FIFO)")
                 print(f"   Item completely removed from bin")
+                # Re-sort and check warnings after removal
+                self._auto_sort_bin_by_expiration(bin_id)
+                self._check_fifo_warnings(bin_id)
                 return actual_quantity_taken
             else:
                 error_msg = f"Failed to remove {vegetable_name} from bin '{bin_id}'!"
@@ -227,20 +433,22 @@ class StorageSystem:
         target_vegetable.quantity -= actual_quantity_taken
         remaining_quantity = target_vegetable.quantity
         
-        print(f"✅ Took out {actual_quantity_taken} units of {vegetable_name} from bin {bin_id}")
+        print(f"✅ Took out {actual_quantity_taken} units of {vegetable_name} from bin {bin_id} (FIFO)")
         print(f"   Remaining in bin: {remaining_quantity} units")
         
         # Update bin capacity info
         current_capacity = self.get_current_capacity(bin_id)
         print(f"   Bin capacity after removal: {current_capacity}/{bin_obj.max_capacity}")
         
+        # Re-sort and check warnings after partial removal
+        self._auto_sort_bin_by_expiration(bin_id)
+        self._check_fifo_warnings(bin_id)
+        
         return actual_quantity_taken
 
+    # Keep all your other existing methods...
     def get_vegetable_info_from_bin(self, bin_id, vegetable_name):
-        """
-        Get detailed information about a specific vegetable in a bin.
-        Returns vegetable object if found, None otherwise.
-        """
+        """Get detailed information about a specific vegetable in a bin."""
         if bin_id not in self.bins:
             return None
         
@@ -276,24 +484,32 @@ class StorageSystem:
         return status
 
     def print_bin_status(self, bin_id):
-        """Print formatted bin status"""
+        """Print formatted bin status with FIFO information"""
         status = self.get_bin_status(bin_id)
         if not status:
             error_msg = f"Bin '{bin_id}' not found!"
             self._show_message_box("Error", error_msg, MB_ICONERROR)
             print(f"❌ {error_msg}")
             return
+        
         print(f"\n📊 BIN STATUS - {bin_id}")
         print(f"Current Capacity: {status['current_capacity']}/{status['max_capacity']} units")
         print(f"Available Space: {status['available_capacity']} units")
         print(f"Vegetable Items: {status['vegetable_count']} different vegetables")
         print(f"Status: {'🚫 AT CAPACITY' if status['at_capacity'] else '✅ Available'}")
+        
+        # Add FIFO status
+        self.print_fifo_order(bin_id)
 
-    def get_bin_contents(self, bin_id, sort_by_freshness=False):
+    def get_bin_contents(self, bin_id, sort_by_expiration=True, sort_by_freshness=False):
+        """Get bin contents with automatic FIFO sorting by default"""
         if bin_id not in self.bins:
             return []
         vegetables = self.bins[bin_id].get_all_vegetables()
-        if sort_by_freshness:
+        
+        if sort_by_expiration:
+            return self.quicksort_by_expiration(vegetables)
+        elif sort_by_freshness:
             return self.quicksort_by_freshness(vegetables)
         return vegetables
 
@@ -319,6 +535,7 @@ class StorageSystem:
         }
 
     def quicksort_by_freshness(self, vegetables):
+        """Keep your original freshness sorting method"""
         if len(vegetables) <= 1:
             return vegetables
         pivot = vegetables[len(vegetables) // 2]
@@ -334,6 +551,7 @@ class StorageSystem:
         union = set1.union(set2)
         return len(intersection) / len(union) if union else 0
 
+    # Keep all your existing safety methods...
     def check_bin_safety(self, bin_id):
         """Check if an existing bin's conditions are still safe"""
         if bin_id not in self.bins:
