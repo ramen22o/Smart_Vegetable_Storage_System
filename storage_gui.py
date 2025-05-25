@@ -10,11 +10,9 @@ class StorageApp:
         self.root = root
         self.root.title("Smart Vegetable Storage System")
         self.root.geometry("1000x700")
-
         # Modern theme configuration
         self.style = ThemedStyle(self.root)
         self.style.set_theme("equilux")
-
         # Custom styling
         self.style.configure("TFrame", background=self.style.lookup("TFrame", "background"))
         self.style.configure("TLabel",
@@ -52,181 +50,100 @@ class StorageApp:
                              background="#3a7ebf",
                              font=("Segoe UI", 10, "bold"),
                              padding=10)
-
         self.storage_system = StorageSystem()
         self.create_widgets()
         self.update_bin_dropdowns()
 
     def create_widgets(self):
-        # Main container
         main_frame = ttk.Frame(self.root, padding=(20, 10))
         main_frame.pack(expand=True, fill=tk.BOTH)
 
-        # Header
         header_frame = ttk.Frame(main_frame)
         header_frame.pack(fill=tk.X, pady=(0, 20))
-        header = ttk.Label(
-            header_frame,
-            text="Smart Vegetable Storage System",
-            font=("Segoe UI", 20, "bold"),
-            foreground="#3a7ebf"
-        )
+        header = ttk.Label(header_frame, text="Smart Vegetable Storage System", font=("Segoe UI", 20, "bold"), foreground="#3a7ebf")
         header.pack()
-        subheader = ttk.Label(
-            header_frame,
-            text="Manage your vegetable storage with precision",
-            font=("Segoe UI", 10),
-            foreground="#aaaaaa"
-        )
+        subheader = ttk.Label(header_frame, text="Manage your vegetable storage with precision", font=("Segoe UI", 10), foreground="#aaaaaa")
         subheader.pack()
 
-        # Tabs
         tab_control = ttk.Notebook(main_frame)
         tab_control.pack(expand=True, fill=tk.BOTH)
 
-        # Tab 1: View Bins
         view_tab = ttk.Frame(tab_control, padding=20)
         tab_control.add(view_tab, text="👀 View Bins")
         search_frame = ttk.Frame(view_tab)
         search_frame.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(search_frame, text="Bin ID:").pack(side=tk.LEFT, padx=(0, 10))
-        self.bin_dropdown_view = ttk.Combobox(
-            search_frame,
-            state="readonly",
-            font=("Segoe UI", 10)
-        )
+        self.bin_dropdown_view = ttk.Combobox(search_frame, state="readonly", font=("Segoe UI", 10))
         self.bin_dropdown_view.pack(side=tk.LEFT, expand=True, fill=tk.X, ipady=4)
-        ttk.Button(
-            search_frame,
-            text="SHOW CONTENTS",
-            command=self.show_bin_contents,
-            style="Accent.TButton"
-        ).pack(side=tk.RIGHT, padx=(10, 0))
+        ttk.Button(search_frame, text="SHOW CONTENTS", command=self.show_bin_contents, style="Accent.TButton").pack(side=tk.RIGHT, padx=(10, 0))
+
         list_container = ttk.Frame(view_tab)
         list_container.pack(expand=True, fill=tk.BOTH)
-        self.bin_listbox = tk.Listbox(
-            list_container,
-            width=50,
-            height=15,
-            font=("Segoe UI", 10),
-            borderwidth=0,
-            highlightthickness=0,
-            bg="#2d2d2d",
-            fg="#ffffff",
-            selectbackground="#3a7ebf",
-            selectforeground="#ffffff",
-            activestyle="none"
-        )
+        self.bin_listbox = tk.Listbox(list_container, width=50, height=15, font=("Segoe UI", 10), bg="#2d2d2d", fg="#ffffff", selectbackground="#3a7ebf", selectforeground="#ffffff")
         self.bin_listbox.pack(expand=True, fill=tk.BOTH, pady=(10, 0))
         scrollbar = ttk.Scrollbar(list_container, orient="vertical", command=self.bin_listbox.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.bin_listbox.config(yscrollcommand=scrollbar.set)
 
-        # Tab 2: Create Bin
         create_tab = ttk.Frame(tab_control, padding=20)
         tab_control.add(create_tab, text="🆕 Create Bin")
         create_form_frame = ttk.Frame(create_tab)
         create_form_frame.pack(expand=True, fill=tk.BOTH)
-        create_fields = [
-            ("Bin ID:", "create_bin_id"),
-            ("Max Capacity:", "create_max_cap"),
-            ("Temperature (°C):", "create_temp"),
-            ("Humidity (%):", "create_humid")
-        ]
+        create_fields = [("Bin ID:", "create_bin_id"), ("Max Capacity:", "create_max_cap"), ("Temperature (°C):", "create_temp"), ("Humidity (%):", "create_humid")]
         for label_text, attr_name in create_fields:
             self.create_modern_form_field(create_form_frame, label_text, attr_name)
         create_btn_frame = ttk.Frame(create_tab)
         create_btn_frame.pack(fill=tk.X, pady=(20, 0))
-        ttk.Button(
-            create_btn_frame,
-            text="CREATE BIN",
-            command=self.create_bin,
-            style="Accent.TButton"
-        ).pack(pady=10, ipadx=20)
+        ttk.Button(create_btn_frame, text="CREATE BIN", command=self.create_bin, style="Accent.TButton").pack(pady=10, ipadx=20)
 
-        # Tab 3: Add Vegetable
         add_tab = ttk.Frame(tab_control, padding=20)
         tab_control.add(add_tab, text="➕ Add Vegetable")
         form_frame = ttk.Frame(add_tab)
         form_frame.pack(expand=True, fill=tk.BOTH)
-        fields = [
-            ("Name:", "add_name"),
-            ("Quantity:", "add_quantity"),
-            ("Temperature (°C):", "add_temp"),
-            ("Humidity (%):", "add_humid"),
-            ("Expiry Date:", "add_expiry")
-        ]
+        fields = [("Name:", "add_name"), ("Quantity:", "add_quantity"), ("Temperature (°C):", "add_temp"), ("Humidity (%):", "add_humid"), ("Expiry Date:", "add_expiry")]
         for label_text, attr_name in fields:
             self.create_modern_form_field(form_frame, label_text, attr_name)
         bin_frame = ttk.Frame(form_frame)
         bin_frame.pack(fill=tk.X, pady=8)
         ttk.Label(bin_frame, text="Bin ID:").pack(side=tk.LEFT, padx=(0, 10))
-        self.bin_dropdown_add = ttk.Combobox(
-            bin_frame,
-            state="readonly",
-            font=("Segoe UI", 10)
-        )
+        self.bin_dropdown_add = ttk.Combobox(bin_frame, state="readonly", font=("Segoe UI", 10))
         self.bin_dropdown_add.pack(side=tk.RIGHT, expand=True, fill=tk.X, ipady=4)
         btn_frame = ttk.Frame(add_tab)
         btn_frame.pack(fill=tk.X, pady=(20, 0))
-        ttk.Button(
-            btn_frame,
-            text="ADD VEGETABLE",
-            command=self.add_vegetable,
-            style="Accent.TButton"
-        ).pack(pady=10, ipadx=20)
+        ttk.Button(btn_frame, text="ADD VEGETABLE", command=self.add_vegetable, style="Accent.TButton").pack(pady=10, ipadx=20)
 
-        # Tab 4: Remove Vegetable Quantity
         remove_tab = ttk.Frame(tab_control, padding=20)
         tab_control.add(remove_tab, text="➖ Remove Quantity")
         remove_form_frame = ttk.Frame(remove_tab)
         remove_form_frame.pack(expand=True, fill=tk.BOTH)
-
-        # Form fields
         bin_remove_frame = ttk.Frame(remove_form_frame)
         bin_remove_frame.pack(fill=tk.X, pady=8)
         ttk.Label(bin_remove_frame, text="Bin ID:").pack(side=tk.LEFT, padx=(0, 10))
-        self.bin_dropdown_remove = ttk.Combobox(
-            bin_remove_frame,
-            state="readonly",
-            font=("Segoe UI", 10)
-        )
+        self.bin_dropdown_remove = ttk.Combobox(bin_remove_frame, state="readonly", font=("Segoe UI", 10))
         self.bin_dropdown_remove.pack(side=tk.RIGHT, expand=True, fill=tk.X, ipady=4)
-
         veg_remove_frame = ttk.Frame(remove_form_frame)
         veg_remove_frame.pack(fill=tk.X, pady=8)
         ttk.Label(veg_remove_frame, text="Vegetable Name:").pack(side=tk.LEFT, padx=(0, 10))
         self.remove_name = ttk.Entry(veg_remove_frame, font=("Segoe UI", 10))
         self.remove_name.pack(side=tk.RIGHT, expand=True, fill=tk.X, ipady=4)
-
         qty_remove_frame = ttk.Frame(remove_form_frame)
         qty_remove_frame.pack(fill=tk.X, pady=8)
         ttk.Label(qty_remove_frame, text="Quantity to Take:").pack(side=tk.LEFT, padx=(0, 10))
         self.remove_quantity = ttk.Entry(qty_remove_frame, font=("Segoe UI", 10))
         self.remove_quantity.pack(side=tk.RIGHT, expand=True, fill=tk.X, ipady=4)
-
         remove_btn_frame = ttk.Frame(remove_tab)
         remove_btn_frame.pack(fill=tk.X, pady=(20, 0))
-        ttk.Button(
-            remove_btn_frame,
-            text="REMOVE QUANTITY",
-            command=self.remove_vegetable_quantity,
-            style="Accent.TButton"
-        ).pack(pady=10, ipadx=20)
+        ttk.Button(remove_btn_frame, text="REMOVE QUANTITY", command=self.remove_vegetable_quantity, style="Accent.TButton").pack(pady=10, ipadx=20)
 
     def create_modern_form_field(self, parent, label_text, entry_name, var=None):
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.X, pady=8)
         ttk.Label(frame, text=label_text).pack(side=tk.LEFT, padx=(0, 10))
-        if var:
-            entry = ttk.Entry(frame, textvariable=var)
-        else:
-            entry = ttk.Entry(frame)
+        entry = ttk.Entry(frame, font=("Segoe UI", 10))
         entry.pack(side=tk.RIGHT, expand=True, fill=tk.X, ipady=4)
         setattr(self, entry_name, entry)
 
     def update_bin_dropdowns(self):
-        """Update all dropdown menus with current bin IDs"""
         bin_ids = list(self.storage_system.bins.keys())
         self.bin_dropdown_add['values'] = bin_ids
         self.bin_dropdown_view['values'] = bin_ids
@@ -245,7 +162,7 @@ class StorageApp:
             expiry = self.add_expiry.get()
             bin_id = self.bin_dropdown_add.get()
             if not all([name, quantity, temp, humid, expiry, bin_id]):
-                messagebox.showwarning("Input Error", "Please fill all fields.")
+                messagebox.showwarning("Input Error", "All fields are required.")
                 return
             vegetable = Vegetable(name, quantity, temp, humid, expiry)
             if bin_id in self.storage_system.bins:
@@ -293,17 +210,17 @@ class StorageApp:
         else:
             for veg in contents:
                 self.bin_listbox.insert(tk.END, f"🏺 {str(veg)}")
+        # Trigger FIFO warnings
+        self.storage_system._check_fifo_warnings(bin_id, show_warning=True)
 
     def remove_vegetable_quantity(self):
         try:
             bin_id = self.bin_dropdown_remove.get()
             vegetable_name = self.remove_name.get()
             quantity_to_take = int(self.remove_quantity.get())
-
             if not bin_id or not vegetable_name or not quantity_to_take:
                 messagebox.showwarning("Input Error", "All fields are required.")
                 return
-
             taken = self.storage_system.take_out_vegetable_quantity(bin_id, vegetable_name, quantity_to_take)
             if taken > 0:
                 messagebox.showinfo("Success", f"Removed {taken} units of '{vegetable_name}' from bin '{bin_id}'.")
@@ -314,6 +231,10 @@ class StorageApp:
                 messagebox.showerror("Error", f"Failed to remove '{vegetable_name}' from bin '{bin_id}'.")
         except ValueError:
             messagebox.showerror("Input Error", "Please enter a valid quantity.")
+
+    def run(self):
+        self.root.mainloop()
+
 
 if __name__ == "__main__":
     try:
